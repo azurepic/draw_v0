@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>お絵描きアプリ</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --panel: #ffffff;
+      --line: #d9deea;
+      --text: #222;
+      --muted: #667085;
+      --accent: #4f46e5;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(246, 247, 251, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+      padding: 10px;
+    }
+
+    .toolbar-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 8px 10px;
+    }
+
+    button, input[type="range"] {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      min-height: 42px;
+    }
+
+    button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    button:hover {
+      filter: brightness(0.98);
+    }
+
+    label {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .color-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="color"] {
+      width: 42px;
+      height: 42px;
+      border: none;
+      background: none;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .size-value {
+      min-width: 28px;
+      text-align: right;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      padding: 12px;
+    }
+
+    .canvas-card {
+      width: min(1100px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .canvas-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .canvas-stage {
+      position: relative;
+      height: calc(100vh - 170px);
+      min-height: 420px;
+      background:
+        linear-gradient(#fdfdfd, #fdfdfd),
+        linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px),
+        linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px);
+      background-size: auto, 20px 20px, 20px 20px;
+      background-position: 0 0, 0 0, 0 0;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: white;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    .note {
+      padding: 8px 14px 14px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 640px) {
+      .canvas-stage {
+        height: calc(100vh - 230px);
+        min-height: 360px;
+      }
+
+      .group {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar">
+      <div class="toolbar-inner">
+        <div class="group">
+          <button id="penBtn" class="active">ペン</button>
+          <button id="eraserBtn">消しゴム</button>
+          <button id="fillBtn">塗りつぶし</button>
+        </div>
+
+        <div class="group">
+          <div class="color-wrap">
+            <label for="colorPicker">色</label>
+            <input id="colorPicker" type="color" value="#222222" />
+          </div>
+        </div>
+
+        <div class="group">
+          <label for="sizeRange">太さ</label>
+          <input id="sizeRange" type="range" min="1" max="50" value="6" />
+          <span id="sizeValue" class="size-value">6</span>
+        </div>
+
+        <div class="group">
+          <button id="undoBtn">もどす</button>
+          <button id="clearBtn">全消し</button>
+          <button id="saveBtn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <div class="canvas-card">
+        <div class="canvas-header">指でもマウスでも描ける。塗りつぶしは閉じた線の内側で使うときれい。</div>
+        <div class="canvas-stage">
+          <canvas id="canvas"></canvas>
+        </div>
+        <div class="note">保存はPNG。iPhoneでもそのまま使えるように1ファイルで完結。</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    const penBtn = document.getElementById("penBtn");
+    const eraserBtn = document.getElementById("eraserBtn");
+    const fillBtn = document.getElementById("fillBtn");
+    const colorPicker = document.getElementById("colorPicker");
+    const sizeRange = document.getElementById("sizeRange");
+    const sizeValue = document.getElementById("sizeValue");
+    const undoBtn = document.getElementById("undoBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const saveBtn = document.getElementById("saveBtn");
+
+    const stage = document.querySelector(".canvas-stage");
+
+    let drawing = false;
+    let tool = "pen";
+    let lineWidth = Number(sizeRange.value);
+    let color = colorPicker.value;
+    let lastX = 0;
+    let lastY = 0;
+    let history = [];
+
+    function resizeCanvas() {
+      const rect = stage.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+
+      const prev = document.createElement("canvas");
+      prev.width = canvas.width;
+      prev.height = canvas.height;
+      const prevCtx = prev.getContext("2d");
+      prevCtx.drawImage(canvas, 0, 0);
+
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      canvas.style.width = rect.width + "px";
+      canvas.style.height = rect.height + "px";
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      if (prev.width > 0 && prev.height > 0) {
+        ctx.drawImage(prev, 0, 0, prev.width, prev.height, 0, 0, rect.width, rect.height);
+      }
+
+      applyDrawingStyle();
+    }
+
+    function applyDrawingStyle() {
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = lineWidth;
+      ctx.strokeStyle = color;
+    }
+
+    function setActiveTool(nextTool) {
+      tool = nextTool;
+      penBtn.classList.toggle("active", tool === "pen");
+      eraserBtn.classList.toggle("active", tool === "eraser");
+      fillBtn.classList.toggle("active", tool === "fill");
+    }
+
+    function saveHistory() {
+      if (history.length >= 20) history.shift();
+      history.push(canvas.toDataURL("image/png"));
+    }
+
+    function restoreFromDataUrl(url) {
+      const img = new Image();
+      img.onload = () => {
+        const rect = stage.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      };
+      img.src = url;
+    }
+
+    function getPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = event.clientX ?? (event.touches && event.touches[0]?.clientX) ?? 0;
+      const clientY = event.clientY ?? (event.touches && event.touches[0]?.clientY) ?? 0;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    function startDraw(event) {
+      const p = getPoint(event);
+
+      if (tool === "fill") {
+        saveHistory();
+        floodFill(Math.floor(p.x), Math.floor(p.y), hexToRgba(color));
+        return;
+      }
+
+      saveHistory();
+      drawing = true;
+      lastX = p.x;
+      lastY = p.y;
+
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      draw(event);
+    }
+
+    function draw(event) {
+      if (!drawing) return;
+      event.preventDefault();
+
+      const p = getPoint(event);
+
+      if (tool === "eraser") {
+        ctx.save();
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+
+      lastX = p.x;
+      lastY = p.y;
+    }
+
+    function stopDraw() {
+      drawing = false;
+    }
+
+    function clearCanvas() {
+      saveHistory();
+      const rect = stage.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    }
+
+    function downloadImage() {
+      const link = document.createElement("a");
+      link.download = "drawing.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    }
+
+    function undo() {
+      if (history.length === 0) return;
+      const last = history.pop();
+      restoreFromDataUrl(last);
+    }
+
+    function hexToRgba(hex) {
+      const clean = hex.replace("#", "");
+      const bigint = parseInt(clean, 16);
+      return {
+        r: (bigint >> 16) & 255,
+        g: (bigint >> 8) & 255,
+        b: bigint & 255,
+        a: 255
+      };
+    }
+
+    function colorsMatch(data, index, target) {
+      return (
+        data[index] === target.r &&
+        data[index + 1] === target.g &&
+        data[index + 2] === target.b &&
+        data[index + 3] === target.a
+      );
+    }
+
+    function setColorAt(data, index, fill) {
+      data[index] = fill.r;
+      data[index + 1] = fill.g;
+      data[index + 2] = fill.b;
+      data[index + 3] = fill.a;
+    }
+
+    function floodFill(startX, startY, fillColor) {
+      const width = canvas.width;
+      const height = canvas.height;
+
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      const pixelIndex = (Math.floor(startY * (window.devicePixelRatio || 1)) * width + Math.floor(startX * (window.devicePixelRatio || 1))) * 4;
+
+      const targetColor = {
+        r: data[pixelIndex],
+        g: data[pixelIndex + 1],
+        b: data[pixelIndex + 2],
+        a: data[pixelIndex + 3]
+      };
+
+      if (
+        targetColor.r === fillColor.r &&
+        targetColor.g === fillColor.g &&
+        targetColor.b === fillColor.b &&
+        targetColor.a === fillColor.a
+      ) {
+        return;
+      }
+
+      const stack = [[Math.floor(startX * (window.devicePixelRatio || 1)), Math.floor(startY * (window.devicePixelRatio || 1))]];
+
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        if (x < 0 || y < 0 || x >= width || y >= height) continue;
+
+        const idx = (y * width + x) * 4;
+        if (!colorsMatch(data, idx, targetColor)) continue;
+
+        setColorAt(data, idx, fillColor);
+
+        stack.push([x + 1, y]);
+        stack.push([x - 1, y]);
+        stack.push([x, y + 1]);
+        stack.push([x, y - 1]);
+      }
+
+      ctx.putImageData(imgData, 0, 0);
+    }
+
+    penBtn.addEventListener("click", () => setActiveTool("pen"));
+    eraserBtn.addEventListener("click", () => setActiveTool("eraser"));
+    fillBtn.addEventListener("click", () => setActiveTool("fill"));
+
+    colorPicker.addEventListener("input", (e) => {
+      color = e.target.value;
+      applyDrawingStyle();
+    });
+
+    sizeRange.addEventListener("input", (e) => {
+      lineWidth = Number(e.target.value);
+      sizeValue.textContent = lineWidth;
+      applyDrawingStyle();
+    });
+
+    undoBtn.addEventListener("click", undo);
+    clearBtn.addEventListener("click", clearCanvas);
+    saveBtn.addEventListener("click", downloadImage);
+
+    canvas.addEventListener("pointerdown", startDraw);
+    canvas.addEventListener("pointermove", draw);
+    window.addEventListener("pointerup", stopDraw);
+    window.addEventListener("pointercancel", stopDraw);
+
+    window.addEventListener("resize", resizeCanvas);
+
+    resizeCanvas();
+    applyDrawingStyle();
+
+    const rect = stage.getBoundingClientRect();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+  </script>
+</body>
+</html>
